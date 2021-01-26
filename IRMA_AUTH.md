@@ -1,80 +1,82 @@
 # IRMA Authentication
+
 **NOTE**: IRMA authentication is NOT supported, you are on your own!
 
-**NOTE**: The IRMA server is NOT part of the VPN software packages. YOU are responsible for its installation, configuration, installing updates, keep it secure and in general keep it running!
+**NOTE**: The IRMA server is NOT part of the VPN software packages. **YOU** are responsible for its installation, configuration, installing updates, keep it secure and in general keep it running!
 
 **NOTE**: IRMA authentication is NOT production ready! Check the bottom of this document for open issues.
-___
-## IRMA Server Configuration
-First, download the IRMA server according to the documentation from the [IRMA documentation](https://irma.app/docs/getting-started/). Then, create the IRMA configuration file as follows:
-```yml
+
+We assume that you already have a working VPN server with valid TLS certificate. See [deployment](README.md#deployment) if you do not already.
+
+## IRMA Server Installation & Configuration
+
+Download and install the IRMA server according to the [documentation](https://irma.app/docs/getting-started/). Use the following
+configuration file, e.g. `irma.yml`:
+
+```
+# use stricter defaults for the configuration options
 production: true
 no_email: true
-
+# listen only on "localhost" as traffic goes either directly
+# to localhost, *or* through the reverse proxy
+listen_addr: "127.0.0.1"
+port: 8088
 # this is the URL used by the app to connect to the IRMA-go server through the
 # (reverse) proxy
 url: "https://vpn.example/irma"
-port: 8088
 
 requestors:
-  myapp:
-    disclose_perms: [ "{attribute}" ]
-    sign_perms: []
+  vpn:
+    # the attribute to be used for the user ID
+    disclose_perms: ["pbdf.sidn-pbdf.email.email"]
     auth_method: "token"
-    key: "{mysecrettoken}"
-```
-The file can be named as one pleases but has to have the `.yml` extension.
-
-The variables mean the following:
-* `production`: Setting this to true means that the default configurations for the other options are stricter.
-* `port`: The port on which the server can be found.
-* `url`: The url on which the server can be found.
-* `disclose_perms`: The attributes the application that uses the specified `key` are allowed to disclose. Where `{attribute}` is the identifier of the particular attribute. All the identifiers can be found [here](https://privacybydesign.foundation/attribute-index/en/pbdf.html) under their Issuer &#8594; Credentials.
-* `sign_perms`: The attributes the server is allowed to use to sign documents.
-* `auth_method`: Specifies the authentication method. In the case of eduVPN this has to be `token`.
-* `key`: Specifies the key that the eduVPN server has to send in the initial POST-request authentication header in order to be allowed to connect to the server. This token can be whatever you want. It only needs to match the token in the eduVPN configuration.
-
-If you have the IRMA server installed from source, the configuration file must be in the `irmago` directory. Furthermore, if you want to start the server, you have to change your working directory to `irmago` and start the server with the following command:
-```sh
-$ go run ./irma server -c irma_configuration_file.yml
+    # key to allow VPN portal to talk to server. Generate one using e.g.
+    # `pwgen -s 32 -n 1`
+    key: "dz0OSwTqr0tJxpH7uJ9GL0PZMf3OCELF"
 ```
 
-If you have installed the IRMA server using the prebuilt binary, the configuration file has to be placed in the same directory from which you are starting the server. Then to start the server, use the following command:
-```sh
-$ irma server -c irma_configuration_file.yml
+To start the IRMA server:
+
 ```
- If you want to add verbosity, you can add the options `-v` or `-vv`.
+$ irma server -c irma.yml
+```
 
 ## Portal Configuration
-First, install the environment for your OS and follow the instructions from the "Base Deploy" and "Web Server Certificates" sections:  [Fedora](https://github.com/eduvpn/documentation/blob/v2/DEPLOY_FEDORA.md), [Debian](https://github.com/eduvpn/documentation/blob/v2/DEPLOY_DEBIAN.md), or [CentOS](https://github.com/eduvpn/documentation/blob/v2/DEPLOY_CENTOS.md).
 
-If you have the environment installed, change the `config.php` file in the  `/etc/vpn-user-portal/` directory:
+Modify `/etc/vpn-user-portal/config.php` by changing `authMethod` to
+`IrmaAuthentication` and adding the `IrmaAuthentication` section. For example:
 
-First, comment the line:
-```php
-'authMethod' => 'FormPdoAuthentication',        // PDO (database)
 ```
-Then, add the following lines:
-```php
+// ...
+
 'authMethod' => 'IrmaAuthentication',
+
+// ...
+
 'IrmaAuthentication' => [
-    'irmaServerUrl' => 'http://localhost:8088',
+    // Specify the URL to your (local) IRMA server.
+    // OPTIONAL, DEFAULT: http://localhost:8088
+    //'irmaServerUrl' => 'http://localhost:8088',
+
+    // The attribute used for the user ID in the service
     'userIdAttribute' => 'pbdf.sidn-pbdf.email.email',
-    'secretToken' => 'mysecrettoken',
+
+    // The token to talk to the session endpoint of the IRMA server, make
+    // sure it matches the one configured in the IRMA server config
+    'secretToken' => 'dz0OSwTqr0tJxpH7uJ9GL0PZMf3OCELF',
 ],
 ```
-The variables mean the following:
-   * `authMethod`: The authentication method the VPN service has to use. In our case: IRMA.
-   * `irmaServerUrl`: The address on which the VPN server can find your IRMA server.
-   * `userIdAttribute`: This is the attribute that the server has to verify.
-   * `secretToken`: This is the token is used to let the server identify itself to the IRMA server.
 
-Second, you have to change the Apache configuration file to configure the reverse proxy. Change the following file: `/etc/httpd/conf.d/{your_host_name}.conf`. You need to add the following lines to the HTTPS `VirtualHost`:
-```sh
-ProxyPass "/irma/"  "http://localhost:8088/irma/"
+Change the Apache configuration to add the reverse proxy line to allow the IRMA
+app to talk to the IRMA server. Modify `/etc/httpd/conf.d/${WEB_FQDN}.conf` and
+add the following line in the `<VirtualHost *:443>` section:
+
+```
+ProxyPass   "/irma/"   "http://localhost:8088/irma/"
 ```
 
-At last run the following command:
+Restart Apache:
+
 ```
 $ sudo systemctl restart httpd
 ```
