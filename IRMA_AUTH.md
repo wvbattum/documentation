@@ -80,3 +80,20 @@ Restart Apache:
 ```
 $ sudo systemctl restart httpd
 ```
+
+## Open Issues / TODO
+
+* Can we implement IRMA authentication without using any JS in the browser?
+  That seems doable: the only issue might be that the server doesn't know when
+  the app completes and thus has to do some kind of polling, or ask the user
+  to click a button when they are finished with the app...
+* Bug in `irma.js` that uses inline CSS to style stuff, bad JS! So you need to
+  modify `/etc/httpd/conf.d/vpn-user-portal.conf`:
+  `Header always set Content-Security-Policy "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:"`
+* Properly package the IRMA server for Debian/Fedora
+* Build the `irma.js` file from source, this is simply a "binary" taken from
+  a Gitlab server
+* Is the proxy configuration safe like this? Is really only `/irma` accessible
+  on the irma-go server? Or can you use `../../` trickery? If this is safe
+  we can remove the token authentication!
+* Document how to properly integrate with systemd
